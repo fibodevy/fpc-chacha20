@@ -70,7 +70,7 @@ begin
   state.position := 64;
 end;
 
-procedure cha20_next_block(var state: chacha20state);
+procedure chacha20_next_block(var state: chacha20state);
 var
   i: integer;
 begin
@@ -104,7 +104,7 @@ var
   i: integer;
 begin
   for i := 0 to l-1 do begin
-    if state.position >= 64 then cha20_next_block(state);
+    if state.position >= 64 then chacha20_next_block(state);
     pbyte(p+i)^ := pbyte(p+i)^ xor pbyte(@state.keystream[0]+state.position)^;
     inc(state.position);
   end;
