@@ -11,7 +11,7 @@ begin
   chacha20_init(cc, 'key', 'nonce');
 
   s := 'hello';
-  s := copy(s, 1, 999); // make string memory writable
+  s := copy(s, 1); // make string memory writable
 
   // encrypt
   chacha20_xor(cc, @s[1], length(s));

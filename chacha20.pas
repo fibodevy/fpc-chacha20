@@ -12,42 +12,22 @@ type
   chacha20state = packed record
     state: array[0..15] of dword;
     keystream: array[0..15] of dword;
-    position: uint8;
+    position: byte;
   end;
 
-function chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0): boolean;
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0);
 procedure chacha20_set_counter(var state: chacha20state; counter: dword);
 procedure chacha20_xor(var state: chacha20state; p: pointer; l: dword);
 
 implementation
 
-function rotl32(x, n: dword): dword; inline;
-begin
-  result := (x shl n) or (x shr (32-n));
-end;
-
-procedure CHACHA20_QUARTERROUND(p: pointer; a, b, c, d: dword); inline;
-type
-  t = array[0..15] of dword;
-var
-	x: ^t;
-begin
-  x := p;
-  x^[a] += x^[b]; x^[d] := rotl32(x^[d] xor x^[a], 16);
-  x^[c] += x^[d]; x^[b] := rotl32(x^[b] xor x^[c], 12);
-  x^[a] += x^[b]; x^[d] := rotl32(x^[d] xor x^[a], 8);
-  x^[c] += x^[d]; x^[b] := rotl32(x^[b] xor x^[c], 7);
-end;
-
-function chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0): boolean;
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0);
 const
   magic = 'expand 32-byte k';
 begin
-  result := false;
-
   fillchar(state, sizeof(state), 0);
 
-	// magic 16 bytes
+  // magic 16 bytes
   move(magic[1], state.state[0], 16);
 
   // key 32 bytes; if longer then cut it
@@ -60,8 +40,6 @@ begin
 
   // counter
   chacha20_set_counter(state, counter);
-
-  result := true;
 end;
 
 procedure chacha20_set_counter(var state: chacha20state; counter: dword);
@@ -70,23 +48,36 @@ begin
   state.position := 64;
 end;
 
+function rotl32(x, n: dword): dword; inline;
+begin
+  result := (x shl n) or (x shr (32-n));
+end;
+
+procedure chacha20_quarterround(p: pdword; a, b, c, d: byte); inline;
+begin
+  p[a] += p[b]; p[d] := rotl32(p[d] xor p[a], 16);
+  p[c] += p[d]; p[b] := rotl32(p[b] xor p[c], 12);
+  p[a] += p[b]; p[d] := rotl32(p[d] xor p[a], 8);
+  p[c] += p[d]; p[b] := rotl32(p[b] xor p[c], 7);
+end;
+
 procedure chacha20_next_block(var state: chacha20state);
 var
-  i: integer;
+i: integer;
 begin
   // copy state to keystream
   move(state.state, state.keystream, 64);
 
   // mix the bytes a lot and hope that nobody finds out how to undo it
-	for i := 1 to 10 do begin
-		CHACHA20_QUARTERROUND(@state.keystream, 0, 4, 8, 12);
-		CHACHA20_QUARTERROUND(@state.keystream, 1, 5, 9, 13);
-		CHACHA20_QUARTERROUND(@state.keystream, 2, 6, 10, 14);
-		CHACHA20_QUARTERROUND(@state.keystream, 3, 7, 11, 15);
-		CHACHA20_QUARTERROUND(@state.keystream, 0, 5, 10, 15);
-		CHACHA20_QUARTERROUND(@state.keystream, 1, 6, 11, 12);
-		CHACHA20_QUARTERROUND(@state.keystream, 2, 7, 8, 13);
-		CHACHA20_QUARTERROUND(@state.keystream, 3, 4, 9, 14);
+  for i := 1 to 10 do begin
+    chacha20_quarterround(@state.keystream, 0, 4, 8, 12);
+    chacha20_quarterround(@state.keystream, 1, 5, 9, 13);
+    chacha20_quarterround(@state.keystream, 2, 6, 10, 14);
+    chacha20_quarterround(@state.keystream, 3, 7, 11, 15);
+    chacha20_quarterround(@state.keystream, 0, 5, 10, 15);
+    chacha20_quarterround(@state.keystream, 1, 6, 11, 12);
+    chacha20_quarterround(@state.keystream, 2, 7, 8, 13);
+    chacha20_quarterround(@state.keystream, 3, 4, 9, 14);
   end;
 
   // add state dwords to keystream dwords
@@ -104,7 +95,7 @@ var
   i: integer;
 begin
   for i := 0 to l-1 do begin
-    if state.position >= 64 then chacha20_next_block(state);
+  if state.position >= 64 then chacha20_next_block(state);
     pbyte(p+i)^ := pbyte(p+i)^ xor pbyte(@state.keystream[0]+state.position)^;
     inc(state.position);
   end;
