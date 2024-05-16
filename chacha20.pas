@@ -1,10 +1,13 @@
 unit chacha20;
 
-// ChaCha20 version with 96 bit nonce
+// ChaCha20 implementation for FPC
 // Copyright (c) 2024 fibodevy https://github.com/fibodevy
 // License: MIT
 
 {$mode ObjFPC}{$H+}
+
+// uncomment to use 64 bit counter and 64 bit nonce, otherwise use 32 bit counter and 96 bit nonce
+//{$define COUNTER64}
 
 interface
 
@@ -15,13 +18,13 @@ type
     position: byte;
   end;
 
-procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0);
-procedure chacha20_set_counter(var state: chacha20state; counter: dword);
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef COUNTER64}qword{$else}dword{$endif}=0);
+procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef COUNTER64}qword{$else}dword{$endif});
 procedure chacha20_xor(var state: chacha20state; p: pointer; l: dword);
 
 implementation
 
-procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: dword=0);
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef COUNTER64}qword{$else}dword{$endif}=0);
 const
   magic = 'expand 32-byte k';
 begin
@@ -34,15 +37,20 @@ begin
   if length(key) > 32 then setlength(key, 32);
   if key <> '' then move(key[1], state.state[4], length(key));
 
-  // nonce 12 bytes; if longer then cut it
-  if length(nonce) > 12 then setlength(nonce, 12);
-  if nonce <> '' then move(nonce[1], state.state[13], length(nonce));
-
   // counter
   chacha20_set_counter(state, counter);
+
+  // nonce 8 or 12 bytes; if longer then cut it
+  {$ifdef COUNTER64}     
+  if length(nonce) > 8 then setlength(nonce, 8);
+  if nonce <> '' then move(nonce[1], state.state[14], length(nonce));
+  {$else} 
+  if length(nonce) > 12 then setlength(nonce, 12);
+  if nonce <> '' then move(nonce[1], state.state[13], length(nonce));
+  {$endif}
 end;
 
-procedure chacha20_set_counter(var state: chacha20state; counter: dword);
+procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef COUNTER64}qword{$else}dword{$endif});
 begin
   move(counter, state.state[12], sizeof(counter));
   state.position := 64;
@@ -84,7 +92,11 @@ begin
   for i := 0 to high(state.keystream) do state.keystream[i] += state.state[i];
 
   // increase counter
-  inc(state.state[12]);
+  {$ifdef COUNTER64}
+  pqword(@state.state[12])^ += 1;
+  {$else}
+  pdword(@state.state[12])^ += 1;
+  {$endif}
 
   // reset position
   state.position := 0;
@@ -95,7 +107,7 @@ var
   i: integer;
 begin
   for i := 0 to l-1 do begin
-  if state.position >= 64 then chacha20_next_block(state);
+    if state.position >= 64 then chacha20_next_block(state);
     pbyte(p+i)^ := pbyte(p+i)^ xor pbyte(@state.keystream[0]+state.position)^;
     inc(state.position);
   end;
