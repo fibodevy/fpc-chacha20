@@ -7,7 +7,7 @@ var
   cc: chacha20state;
 
 begin
-  // key should be 32 bytes, nonce 12 bytes
+  // key should be 32 bytes, nonce 8 bytes (or 12 bytes for IETF version)
   chacha20_init(cc, 'key', 'nonce');
 
   s := 'hello';

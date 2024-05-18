@@ -6,25 +6,25 @@ unit chacha20;
 
 {$mode ObjFPC}{$H+}
 
-// uncomment to use 64 bit counter and 64 bit nonce, otherwise use 32 bit counter and 96 bit nonce
-//{$define COUNTER64}
+// uncomment to use IETF version (96 bit nonce + 32 bit key instead of 64 bits for both)
+//{$define IETF}
 
 interface
 
 type
-  chacha20state = packed record
+  chacha20state = record
     state: array[0..15] of dword;
     keystream: array[0..15] of dword;
-    position: byte;
+    position: dword;
   end;
 
-procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef COUNTER64}qword{$else}dword{$endif}=0);
-procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef COUNTER64}qword{$else}dword{$endif});
-procedure chacha20_xor(var state: chacha20state; p: pointer; l: dword);
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef IETF}dword{$else}qword{$endif}=0);
+procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef IETF}dword{$else}qword{$endif});
+procedure chacha20_xor(var state: chacha20state; data: pointer; len: dword);
 
 implementation
 
-procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef COUNTER64}qword{$else}dword{$endif}=0);
+procedure chacha20_init(var state: chacha20state; key, nonce: string; counter: {$ifdef IETF}dword{$else}qword{$endif}=0);
 const
   magic = 'expand 32-byte k';
 begin
@@ -41,16 +41,16 @@ begin
   chacha20_set_counter(state, counter);
 
   // nonce 8 or 12 bytes; if longer then cut it
-  {$ifdef COUNTER64}     
-  if length(nonce) > 8 then setlength(nonce, 8);
-  if nonce <> '' then move(nonce[1], state.state[14], length(nonce));
-  {$else} 
+  {$ifdef IETF}                              
   if length(nonce) > 12 then setlength(nonce, 12);
   if nonce <> '' then move(nonce[1], state.state[13], length(nonce));
+  {$else}  
+  if length(nonce) > 8 then setlength(nonce, 8);
+  if nonce <> '' then move(nonce[1], state.state[14], length(nonce));
   {$endif}
 end;
 
-procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef COUNTER64}qword{$else}dword{$endif});
+procedure chacha20_set_counter(var state: chacha20state; counter: {$ifdef IETF}dword{$else}qword{$endif});
 begin
   move(counter, state.state[12], sizeof(counter));
   state.position := 64;
@@ -71,7 +71,7 @@ end;
 
 procedure chacha20_next_block(var state: chacha20state);
 var
-i: integer;
+  i: integer;
 begin
   // copy state to keystream
   move(state.state, state.keystream, 64);
@@ -92,23 +92,23 @@ begin
   for i := 0 to high(state.keystream) do state.keystream[i] += state.state[i];
 
   // increase counter
-  {$ifdef COUNTER64}
-  pqword(@state.state[12])^ += 1;
-  {$else}
+  {$ifdef IETF}
   pdword(@state.state[12])^ += 1;
+  {$else}  
+  pqword(@state.state[12])^ += 1;
   {$endif}
 
   // reset position
   state.position := 0;
 end;
 
-procedure chacha20_xor(var state: chacha20state; p: pointer; l: dword);
+procedure chacha20_xor(var state: chacha20state; data: pointer; len: dword);
 var
-  i: integer;
+  i: dword;
 begin
-  for i := 0 to l-1 do begin
+  for i := 0 to len-1 do begin
     if state.position >= 64 then chacha20_next_block(state);
-    pbyte(p+i)^ := pbyte(p+i)^ xor pbyte(@state.keystream[0]+state.position)^;
+    pbyte(data+i)^ := pbyte(data+i)^ xor pbyte(@state.keystream[0]+state.position)^;
     inc(state.position);
   end;
 end;
